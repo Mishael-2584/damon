@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Damon Music Academy - Admin Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        purple: {
+                            700: '#7c3aed',
+                            800: '#6d28d9',
+                            900: '#581c87'
+                        },
+                        pink: {
+                            600: '#ec4899',
+                            700: '#be185d'
+                        },
+                        orange: {
+                            500: '#f97316'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-100">
+    <div id="app">
+        <!-- Login Form -->
+        <div id="loginForm" class="min-h-screen flex items-center justify-center">
+            <div class="bg-white p-8 rounded-2xl shadow-lg w-full max-w-md">
+                <div class="text-center mb-8">
+                    <h1 class="text-3xl font-bold text-purple-900 mb-2">Admin Panel</h1>
+                    <p class="text-gray-600">Damon Music Academy</p>
+                </div>
+                
+                <form id="loginFormElement">
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Username</label>
+                        <input type="text" id="username" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-purple-500" required>
+                    </div>
+                    
+                    <div class="mb-6">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Password</label>
+                        <input type="password" id="password" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-purple-500" required>
+                    </div>
+                    
+                    <button type="submit" class="w-full bg-gradient-to-r from-purple-700 to-pink-600 text-white py-2 rounded-lg hover:from-purple-800 hover:to-pink-700 transition-all duration-200">
+                        Login
+                    </button>
+                </form>
+                
+                <div id="loginError" class="mt-4 text-red-600 text-sm hidden"></div>
+                
+                <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+                    <p class="text-sm text-gray-600">
+                        <strong>Default credentials:</strong><br>
+                        Username: admin<br>
+                        Password: admin123
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dashboard -->
+        <div id="dashboard" class="hidden">
+            <nav class="bg-white shadow-sm border-b">
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="flex justify-between items-center py-4">
+                        <div>
+                            <h1 class="text-2xl font-bold text-purple-900">Damon Music Academy</h1>
+                            <p class="text-gray-600">Admin Dashboard</p>
+                        </div>
+                        <button id="logoutBtn" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors">
+                            Logout
+                        </button>
+                    </div>
+                </div>
+            </nav>
+
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <div class="mb-8">
+                    <h2 class="text-3xl font-bold text-purple-900 mb-4">Contact Form Submissions</h2>
+                    <button id="refreshBtn" class="bg-purple-700 text-white px-4 py-2 rounded-lg hover:bg-purple-800 transition-colors">
+                        Refresh Data
+                    </button>
+                </div>
+
+                <div id="submissionsContainer" class="bg-white rounded-2xl shadow-lg overflow-hidden">
+                    <div id="loadingSpinner" class="p-8 text-center">
+                        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-purple-700"></div>
+                        <p class="mt-2 text-gray-600">Loading submissions...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let authToken = localStorage.getItem('adminToken');
+        
+        // Check if already logged in
+        if (authToken) {
+            showDashboard();
+        }
+
+        // Login form handler
+        document.getElementById('loginFormElement').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch('/api/admin/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    authToken = data.token;
+                    localStorage.setItem('adminToken', authToken);
+                    showDashboard();
+                } else {
+                    document.getElementById('loginError').textContent = data.error;
+                    document.getElementById('loginError').classList.remove('hidden');
+                }
+            } catch (error) {
+                document.getElementById('loginError').textContent = 'Connection error';
+                document.getElementById('loginError').classList.remove('hidden');
+            }
+        });
+
+        // Logout handler
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            localStorage.removeItem('adminToken');
+            authToken = null;
+            showLogin();
+        });
+
+        // Refresh button handler
+        document.getElementById('refreshBtn').addEventListener('click', loadSubmissions);
+
+        function showLogin() {
+            document.getElementById('loginForm').classList.remove('hidden');
+            document.getElementById('dashboard').classList.add('hidden');
+        }
+
+        function showDashboard() {
+            document.getElementById('loginForm').classList.add('hidden');
+            document.getElementById('dashboard').classList.remove('hidden');
+            loadSubmissions();
+        }
+
+        async function loadSubmissions() {
+            const container = document.getElementById('submissionsContainer');
+            container.innerHTML = `
+                <div id="loadingSpinner" class="p-8 text-center">
+                    <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-purple-700"></div>
+                    <p class="mt-2 text-gray-600">Loading submissions...</p>
+                </div>
+            `;
+
+            try {
+                const response = await fetch('/api/admin/submissions', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                if (response.status === 401 || response.status === 403) {
+                    localStorage.removeItem('adminToken');
+                    showLogin();
+                    return;
+                }
+
+                const submissions = await response.json();
+                displaySubmissions(submissions);
+            } catch (error) {
+                container.innerHTML = `
+                    <div class="p-8 text-center text-red-600">
+                        <p>Error loading submissions: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        function displaySubmissions(submissions) {
+            const container = document.getElementById('submissionsContainer');
+            
+            if (submissions.length === 0) {
+                container.innerHTML = `
+                    <div class="p-8 text-center text-gray-600">
+                        <p>No submissions yet.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const submissionsHTML = submissions.map(submission => `
+                <div class="border-b border-gray-200 p-6 hover:bg-gray-50">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="text-lg font-semibold text-purple-900">
+                                ${submission.first_name} ${submission.last_name}
+                            </h3>
+                            <p class="text-gray-600">${submission.email}</p>
+                            <p class="text-sm text-gray-500">
+                                ${new Date(submission.created_at).toLocaleString()}
+                            </p>
+                        </div>
+                        <button onclick="deleteSubmission(${submission.id})" 
+                                class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 transition-colors text-sm">
+                            Delete
+                        </button>
+                    </div>
+                    
+                    ${submission.program ? `
+                        <div class="mb-2">
+                            <span class="bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-sm">
+                                ${submission.program}
+                            </span>
+                        </div>
+                    ` : ''}
+                    
+                    ${submission.message ? `
+                        <div class="bg-gray-50 p-3 rounded-lg">
+                            <p class="text-gray-700">${submission.message}</p>
+                        </div>
+                    ` : ''}
+                </div>
+            `).join('');
+
+            container.innerHTML = `
+                <div class="divide-y divide-gray-200">
+                    ${submissionsHTML}
+                </div>
+            `;
+        }
+
+        async function deleteSubmission(id) {
+            if (!confirm('Are you sure you want to delete this submission?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/admin/submissions/${id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                if (response.ok) {
+                    loadSubmissions(); // Refresh the list
+                } else {
+                    alert('Error deleting submission');
+                }
+            } catch (error) {
+                alert('Error deleting submission: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>
